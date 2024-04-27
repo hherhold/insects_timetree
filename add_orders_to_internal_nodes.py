@@ -24,8 +24,13 @@ args = parser.parse_args()
 orders = set()
 
 def main():
+    # First make sure the input file exists. There's no point in loading the
+    # taxonomy DB (which is slow) if the input file doesn't exist.
+    if not os.path.exists(args.input):
+        print(f"Input file {args.input} does not exist.")
+        exit(1)
+
     print("Loading NCBI taxonomy data...", end="")
-    # Flush the output buffer.
     sys.stdout.flush()
     tax = taxidTools.Taxonomy.from_taxdump(f"{args.taxdump}/nodes.dmp", \
                                            f"{args.taxdump}/rankedlineage.dmp")
@@ -76,15 +81,32 @@ def main():
             # Keep track of all the orders we've seen.
             orders.add(order_name)
 
-
-
-    t.write(outfile=args.output, format=1)
     print(f"Added orders to {leaf_count} leaf nodes")
 
     # Let's dump all the orders we've seen to stdout.
-    print("Orders seen:")
-    for o in orders:
-        print(o)
+    #print("Orders seen:")
+    #for o in orders:
+    #    print(o)
+
+    print("Searching for monophyletic groups...")
+    # For each order in the set of orders we've seen, find the monophyletic group
+    # (or groups) and assign the order to the internal node. Also set the name
+    # to be the order name.
+    for order in orders:
+        print("Searching for", order)
+        for node in t.get_monophyletic(values=[order], target_attr="order"):
+            print(f"Setting {node.name} to {order}")
+            node.add_features(order=order)
+            node.name = order
+
+    # Finally, all the internal nodes that are just numbers should have their
+    # names set to blank, otherwise the tree will look weird with lots of numbers.
+    for n in t.traverse():
+        if not n.is_leaf() and re.match(r"\d+", n.name):
+            n.name = ""
+
+    # All done - write the tree to the output file.
+    t.write(outfile=args.output, format=1)
 
 if __name__ == "__main__":
     main()
