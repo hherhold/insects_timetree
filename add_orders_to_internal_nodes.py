@@ -99,10 +99,12 @@ def main():
             node.add_features(order=order)
             node.name = order
 
-    # Finally, all the internal nodes that are just numbers should have their
-    # names set to blank, otherwise the tree will look weird with lots of numbers.
+    # Finally, all the internal nodes that are just numbers with a single quote
+    # around them should have their names set to blank, otherwise the tree will 
+    # look weird with lots of numbers.
     for n in t.traverse():
-        if not n.is_leaf() and re.match(r"\d+", n.name):
+        if re.match(r"\'\d+\'", n.name):
+            print(f"Setting {n.name} to blank")
             n.name = ""
 
     # All done - write the tree to the output file.
