@@ -20,6 +20,9 @@ parser.add_argument('-o', '--output', help='The output file')
 parser.add_argument('-t', '--taxdump', help='The directory where the taxdump files are located')
 args = parser.parse_args()
 
+# We need to keep track of all the orders we've seen.
+orders = set()
+
 def main():
     print("Loading NCBI taxonomy data...", end="")
     # Flush the output buffer.
@@ -27,9 +30,61 @@ def main():
     tax = taxidTools.Taxonomy.from_taxdump(f"{args.taxdump}/nodes.dmp", \
                                            f"{args.taxdump}/rankedlineage.dmp")
     print("done.")
-    lin = tax.getAncestry(tax.getTaxid('Syrphidae'))
-    lin.filter(['order'])
-    print(lin[0].name)
+    #lin = tax.getAncestry(tax.getTaxid('Machilidae'))
+    #lin.filter(['order'])
+    #print(lin[0].name)
+    #exit(0)
+
+    # There are a handful of families that are not in the taxonomy database. Let's make
+    # a dictionary of these with their orders. I found these online; Pemphigidae is a
+    # family of aphids, and Ascalaphidae is a family of lacewings. Pemphigidae is apparently
+    # no longer used (at least according to iNaturalist).
+    missing_families = {
+        "Ascalaphidae": "Lepidoptera",
+        "Pemphigidae": "Hemiptera",
+        "Anobiidae": "Coleoptera",
+        "Xylophagidae": "Diptera"
+    }
+
+    # Load the tree
+    t = ete3.Tree(args.input, format=1)
+    leaf_count = 0
+    for n in t.traverse():
+        if n.is_leaf():
+            leaf_count += 1
+            family_name = n.name.split("-")[0]
+            #print(f"Leaf node {n.name}, cleaned family name {family_name}")
+
+            order_name = "NA"
+
+            try:
+                family_taxid = tax.getTaxid(family_name)
+                lin = tax.getAncestry(tax.getTaxid(family_name))
+                lin.filter(['order'])
+                order_name = lin[0].name
+            except KeyError:
+                print(f"Family {family_name} not found in the taxonomy database, using dictionary")
+                order_name = missing_families[family_name]
+
+            # Myida is not an insect. What family is this?
+            if order_name == "Myida":
+                print(f"Family {family_name} is Mydia. What is this?")
+
+            #print("Adding order to leaf node", n.name, lin[0].name)
+            n.add_features(order=order_name)
+
+            # Keep track of all the orders we've seen.
+            orders.add(order_name)
+
+
+
+    t.write(outfile=args.output, format=1)
+    print(f"Added orders to {leaf_count} leaf nodes")
+
+    # Let's dump all the orders we've seen to stdout.
+    print("Orders seen:")
+    for o in orders:
+        print(o)
 
 if __name__ == "__main__":
     main()
